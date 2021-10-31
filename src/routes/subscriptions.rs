@@ -3,6 +3,13 @@ use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+#[derive(serde::Deserialize)]
+pub struct FormData {
+    email: String,
+    name: String,
+}
+
+#[allow(clippy::async_yields_async)]
 #[tracing::instrument(
     name="Adding a new subscriber",
     skip(form, pool),
@@ -14,10 +21,7 @@ use uuid::Uuid;
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
     match insert_subscriber(&pool, &form).await {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(e) => {
-            tracing::error!("Failed to execute query: {}", e);
-            HttpResponse::InternalServerError().finish()
-        }
+        Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
 
@@ -43,10 +47,4 @@ pub async fn insert_subscriber(pool: &PgPool, form: &FormData) -> Result<(), sql
         e
     })?;
     Ok(())
-}
-
-#[derive(serde::Deserialize)]
-pub struct FormData {
-    email: String,
-    name: String,
 }
