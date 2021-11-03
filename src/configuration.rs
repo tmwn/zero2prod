@@ -65,8 +65,8 @@ pub enum Environment {
 impl Environment {
     pub fn as_str(&self) -> &'static str {
         match self {
-            &Environment::Local => "local",
-            &Environment::Production => "production",
+            Environment::Local => "local",
+            Environment::Production => "production",
         }
     }
 }
