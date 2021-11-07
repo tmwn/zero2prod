@@ -1,5 +1,5 @@
 use crate::domain::SubscriberEmail;
-use crate::email_client::{EmailClient};
+use crate::email_client::EmailClient;
 use crate::routes::error_chain_fmt;
 use actix_web::{web, HttpResponse, ResponseError};
 use anyhow::Context;
