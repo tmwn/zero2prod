@@ -6,6 +6,7 @@ use actix_web::{
     web, HttpResponse, ResponseError,
 };
 use anyhow::Context;
+use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use reqwest::{header, StatusCode};
 use sha3::Digest;
 use sqlx::PgPool;
@@ -156,29 +157,47 @@ async fn get_confirmed_subscribers(
     Ok(confirmed_subscribers)
 }
 
+#[tracing::instrument(name = "Validate credentials", skip(credentials, pool))]
 async fn validate_credentials(
     credentials: Credentials,
     pool: &PgPool,
 ) -> Result<uuid::Uuid, PublishError> {
-    let password_hash = sha3::Sha3_256::digest(credentials.password.as_bytes());
-    // Lowercase hexadecimal encoding.
-    let password_hash = format!("{:x}", password_hash);
-    let user_id: Option<_> = sqlx::query!(
+    let (user_id, expected_password_hash) = get_stored_credentials(&credentials.username, &pool)
+        .await
+        .map_err(PublishError::UnexpectedError)?
+        .ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username.")))?;
+
+    let expected_password_hash = PasswordHash::new(&expected_password_hash)
+        .context("Failed to parse hash in RHC string format.")
+        .map_err(PublishError::UnexpectedError)?;
+
+    tracing::info_span!("Verify password hash")
+        .in_scope(|| {
+            Argon2::default()
+                .verify_password(credentials.password.as_bytes(), &expected_password_hash)
+        })
+        .context("Invalid password.")
+        .map_err(PublishError::AuthError)?;
+
+    Ok(user_id)
+}
+
+#[tracing::instrument(name = "Get stored credentials", skip(username, pool))]
+async fn get_stored_credentials(
+    username: &str,
+    pool: &PgPool,
+) -> Result<Option<(uuid::Uuid, String)>, anyhow::Error> {
+    let row: Option<_> = sqlx::query!(
         r#"
-        SELECT user_id
-        FROM users
-        WHERE username = $1 AND password_hash = $2
-        "#,
-        credentials.username,
-        password_hash,
+    SELECT user_id, password_hash
+    FROM users
+    WHERE username = $1
+    "#,
+        username,
     )
     .fetch_optional(pool)
     .await
-    .context("Failed to perform a query to validate auth credentials.")
-    .map_err(PublishError::UnexpectedError)?;
-
-    user_id
-        .map(|row| row.user_id)
-        .ok_or_else(|| anyhow::anyhow!("Invalid username or password."))
-        .map_err(PublishError::AuthError)
+    .context("Failed to perform a query to retrieve stored credentials.")?
+    .map(|row| (row.user_id, row.password_hash));
+    Ok(row)
 }
