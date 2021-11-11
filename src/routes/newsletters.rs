@@ -6,9 +6,8 @@ use actix_web::{
     web, HttpResponse, ResponseError,
 };
 use anyhow::Context;
-use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
+use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use reqwest::{header, StatusCode};
-use sha3::Digest;
 use sqlx::PgPool;
 
 #[derive(thiserror::Error)]
