@@ -1,5 +1,5 @@
 use argon2::password_hash::SaltString;
-use argon2::{Argon2, PasswordHasher};
+use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version};
 use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 
@@ -15,16 +15,16 @@ static TRACING: Lazy<()> = Lazy::new(|| {
     let default_filter_level = "info".to_string();
     let subscriber_name = "test".to_string();
     if std::env::var("TEST_LOG").is_ok() {
-        let subscriber = get_subscriber(subscriber_name, default_filter_level,  std::io::stdout);
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
         init_subscriber(subscriber);
     } else {
-        let subscriber = get_subscriber(subscriber_name, default_filter_level,  std::io::sink);
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
         init_subscriber(subscriber);
     }
 });
 
 pub struct TestUser {
-    pub user_id: Uuid,
+    user_id: Uuid,
     pub username: String,
     pub password: String,
 }
@@ -40,10 +40,14 @@ impl TestUser {
 
     async fn store(&self, pool: &PgPool) {
         let salt = SaltString::generate(&mut rand::thread_rng());
-        let password_hash = Argon2::default()
-            .hash_password(self.password.as_bytes(), &salt)
-            .unwrap()
-            .to_string();
+        let password_hash = Argon2::new(
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(15000, 2, 1, None).unwrap(),
+        )
+        .hash_password(self.password.as_bytes(), &salt)
+        .unwrap()
+        .to_string();
         sqlx::query!(
             "INSERT INTO users (user_id, username, password_hash)
             VALUES ($1, $2, $3)",
@@ -62,7 +66,7 @@ pub struct TestApp {
     pub port: u16,
     pub db_pool: PgPool,
     pub email_server: MockServer,
-    test_user: TestUser,
+    pub test_user: TestUser,
 }
 
 pub struct ConfirmationLinks {
